@@ -5,11 +5,12 @@ class QuoteSpider(scrapy.Spider):
     name = 'quotes'
     
     async def start(self):
-        urls =  [
-            "https://quotes.toscrape.com/page/1/",
-        ]
-        for url in urls:
-            yield scrapy.Request(url = url, callback=self.parse)
+        url = "https://quotes.toscrape.com/"
+        tag = getattr(self, "tag" , None)
+        if tag is not None:
+            url = url + 'tag/' + tag
+
+        yield scrapy.Request(url = url, callback=self.parse)
             
     def parse(self, response):
         for quote in response.css('div.quote'):
@@ -22,3 +23,29 @@ class QuoteSpider(scrapy.Spider):
         
         if next_page is not None:
             yield response.follow(next_page,callback=self.parse)
+    
+class AuthorSpider(scrapy.Spider):
+    name = "Author"
+    
+    start_urls = [
+        "https://quotes.toscrape.com/",
+    ]
+    
+    def parse(self, response):
+        author_page_links = response.css('a[href^="/author"]')
+        yield from response.follow_all(author_page_links,self.author_parse)
+        
+        yield from response.follow_all(css='li.next a', callback=self.parse)
+         
+    def author_parse(self, response):
+        def extract_with_css(query):
+            return response.css(query).get(default="").strip()
+        
+        yield {
+            "name" : extract_with_css('h3.author-title::text'),
+            "birthdate" : extract_with_css('span.author-born-date::text'),
+            "birthplace" : response.css('span.author-born-location::text').get(default='').removeprefix("in ")
+            
+        }
+        
+        
